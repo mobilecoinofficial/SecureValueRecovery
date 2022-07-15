@@ -29,20 +29,21 @@ use crate::*;
 
 #[derive(Clone)]
 pub struct SignalApiService<BackupManagerTy>
-where BackupManagerTy: Clone
+where
+    BackupManagerTy: Clone,
 {
-    router:                    route_recognizer::Router<Box<dyn ApiHandler<ApiService = Self>>>,
-    backup_manager:            BackupManagerTy,
-    deny_backup:               bool,
-    rate_limiters:             SignalApiRateLimiters,
+    router: route_recognizer::Router<Box<dyn ApiHandler<ApiService = Self>>>,
+    backup_manager: BackupManagerTy,
+    deny_backup: bool,
+    rate_limiters: SignalApiRateLimiters,
     signal_user_authenticator: Arc<SignalUserAuthenticator>,
 }
 
 #[derive(Clone)]
 pub struct SignalApiRateLimiters {
-    pub token:       actor::Sender<RateLimiter>,
+    pub token: actor::Sender<RateLimiter>,
     pub attestation: actor::Sender<RateLimiter>,
-    pub backup:      actor::Sender<RateLimiter>,
+    pub backup: actor::Sender<RateLimiter>,
 }
 
 lazy_init! {
@@ -61,15 +62,15 @@ lazy_init! {
 }
 
 impl<BackupManagerTy> SignalApiService<BackupManagerTy>
-where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
+where
+    BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static,
 {
     pub fn new(
         signal_user_authenticator: Arc<SignalUserAuthenticator>,
         backup_manager: BackupManagerTy,
         deny_backup: bool,
         rate_limiters: SignalApiRateLimiters,
-    ) -> Self
-    {
+    ) -> Self {
         init_metrics();
 
         let mut router = route_recognizer::Router::new();
@@ -137,8 +138,7 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         &self,
         _user: AnonymousUser,
         _request: Request<Body>,
-    ) -> impl Future<Item = Result<PingResponse, Response<Body>>, Error = failure::Error>
-    {
+    ) -> impl Future<Item = Result<PingResponse, Response<Body>>, Error = failure::Error> {
         Ok(Ok(PingResponse {})).into_future()
     }
 
@@ -147,8 +147,7 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         enclave_name: &str,
         user: SignalUser,
         _request: Request<Body>,
-    ) -> impl Future<Item = Result<GetTokenResponse, Response<Body>>, Error = failure::Error>
-    {
+    ) -> impl Future<Item = Result<GetTokenResponse, Response<Body>>, Error = failure::Error> {
         let timer = GET_TOKEN_TIMER.time();
         let username = user.username.clone();
         let limit = self
@@ -179,8 +178,7 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         enclave_name: &str,
         user: SignalUser,
         request: RemoteAttestationRequest,
-    ) -> impl Future<Item = Result<RemoteAttestationResponse, Response<Body>>, Error = failure::Error>
-    {
+    ) -> impl Future<Item = Result<RemoteAttestationResponse, Response<Body>>, Error = failure::Error> {
         let timer = GET_ATTESTATION_TIMER.time();
         let username = user.username.clone();
         let limit = self
@@ -216,8 +214,7 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         enclave_name: &str,
         user: SignalUser,
         request: KeyBackupRequest,
-    ) -> impl Future<Item = Result<KeyBackupResponse, Response<Body>>, Error = failure::Error>
-    {
+    ) -> impl Future<Item = Result<KeyBackupResponse, Response<Body>>, Error = failure::Error> {
         let timer = PUT_BACKUP_REQUEST_TIMER.time();
         let username = user.username.clone();
         match &request.r#type {
@@ -271,8 +268,7 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         &self,
         user: SignalUser,
         _request: Request<Body>,
-    ) -> impl Future<Item = Result<(), Response<Body>>, Error = failure::Error>
-    {
+    ) -> impl Future<Item = Result<(), Response<Body>>, Error = failure::Error> {
         let timer = DELETE_BACKUPS_TIMER.time();
         let username = user.username.clone();
 
@@ -309,7 +305,12 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
     {
         Box::new(SignalApiHandler::new(
             move |service: &Self, params: route_recognizer::Params, request: Request<Body>| match handler(service, &params, &request) {
-                Some(request_handler) => future::Either::A(request_handler.handle(service, params, request)),
+                Some(request_handler) => {
+                    info!("requestURI: {:?}", request.uri());
+                    info!("request headers: {:?}", request.headers());
+                    info!("request body: {:?}", request.body());
+                    future::Either::A(request_handler.handle(service, params, request))
+                }
                 None => {
                     let mut response = Response::default();
                     *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
@@ -380,7 +381,9 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
     }
 
     fn authorize_request<AuthTy>(authenticator: &AuthTy, request: &Request<Body>) -> Result<AuthTy::User, Response<Body>>
-    where AuthTy: Authenticator {
+    where
+        AuthTy: Authenticator,
+    {
         let credentials = if let Some(header) = request.headers().get(hyper::header::AUTHORIZATION) {
             match BasicCredentials::try_from(header) {
                 Err(_) => {
@@ -422,7 +425,9 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
     fn read_request<ReqTy>(
         request: Request<Body>,
     ) -> impl Future<Item = Result<(request::Parts, ReqTy), Response<Body>>, Error = failure::Error>
-    where ReqTy: for<'de> Deserialize<'de> {
+    where
+        ReqTy: for<'de> Deserialize<'de>,
+    {
         let (request_parts, request_body) = request.into_parts();
 
         let request_data = request_body.concat2().from_err();
@@ -437,10 +442,10 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
         response
     }
 
-    fn handle_result<ResTy>(
-        handler_result: Result<Result<ResTy, Response<Body>>, failure::Error>,
-    ) -> Result<Response<Body>, failure::Error>
-    where ResTy: Serialize + 'static {
+    fn handle_result<ResTy>(handler_result: Result<Result<ResTy, Response<Body>>, failure::Error>) -> Result<Response<Body>, failure::Error>
+    where
+        ResTy: Serialize + 'static,
+    {
         match handler_result {
             Ok(Ok(ok_response)) => {
                 let response_data = serde_json::to_vec(&ok_response)?;
@@ -463,7 +468,8 @@ where BackupManagerTy: BackupManager<User = SignalUser> + Clone + Send + 'static
 }
 
 impl<BackupManagerTy> hyper::service::Service for SignalApiService<BackupManagerTy>
-where BackupManagerTy: Clone
+where
+    BackupManagerTy: Clone,
 {
     type Error = failure::Error;
     type Future = Box<dyn Future<Item = Response<Self::ResBody>, Error = Self::Error> + Send>;
@@ -542,8 +548,7 @@ where
         service: &ApiServiceTy,
         params: route_recognizer::Params,
         request: Request<Body>,
-    ) -> Box<dyn Future<Item = Response<Body>, Error = failure::Error> + Send>
-    {
+    ) -> Box<dyn Future<Item = Response<Body>, Error = failure::Error> + Send> {
         Box::new(self.0(service, params, request))
     }
 
@@ -567,15 +572,15 @@ mod test {
 
     struct SignalApiServiceTestBuilder {
         ratelimiter_size: u64,
-        deny_backup:      bool,
+        deny_backup: bool,
     }
 
     struct SignalApiServiceTest {
-        scenario:       Scenario,
-        runtime:        current_thread::Runtime,
-        service:        SignalApiService<actor::Sender<BackupManagerMock<SignalUser>>>,
+        scenario: Scenario,
+        runtime: current_thread::Runtime,
+        service: SignalApiService<actor::Sender<BackupManagerMock<SignalUser>>>,
         backup_manager: BackupManagerMockHandle<SignalUser>,
-        valid_user:     MockSignalUserToken,
+        valid_user: MockSignalUserToken,
     }
 
     impl BackupManager for actor::Sender<BackupManagerMock<SignalUser>> {
@@ -585,8 +590,7 @@ mod test {
             &self,
             enclave_name: String,
             user: &Self::User,
-        ) -> Box<dyn Future<Item = GetTokenResponse, Error = EnclaveTransactionError> + Send>
-        {
+        ) -> Box<dyn Future<Item = GetTokenResponse, Error = EnclaveTransactionError> + Send> {
             let user = user.clone();
             let call_result =
                 self.sync_call(move |backup_manager: &mut BackupManagerMock<SignalUser>| Ok(backup_manager.get_token(enclave_name, &user)));
@@ -598,8 +602,7 @@ mod test {
             enclave_name: String,
             user: &Self::User,
             request: RemoteAttestationRequest,
-        ) -> Box<dyn Future<Item = RemoteAttestationResponse, Error = RemoteAttestationError> + Send>
-        {
+        ) -> Box<dyn Future<Item = RemoteAttestationResponse, Error = RemoteAttestationError> + Send> {
             let user = user.clone();
             let call_result = self.sync_call(move |backup_manager: &mut BackupManagerMock<SignalUser>| {
                 Ok(backup_manager.get_attestation(enclave_name, &user, request))
@@ -612,8 +615,7 @@ mod test {
             enclave_name: String,
             user: &Self::User,
             request: KeyBackupRequest,
-        ) -> Box<dyn Future<Item = KeyBackupResponse, Error = KeyBackupError> + Send>
-        {
+        ) -> Box<dyn Future<Item = KeyBackupResponse, Error = KeyBackupError> + Send> {
             let user = user.clone();
             let call_result = self.sync_call(move |backup_manager: &mut BackupManagerMock<SignalUser>| {
                 Ok(backup_manager.put_backup_request(enclave_name, &user, request))
@@ -654,27 +656,36 @@ mod test {
             let valid_user = MockSignalUserToken::new(hmac_secret, "valid_user".to_string());
             let authenticator = SignalUserAuthenticator::new(&hmac_secret);
             let rate_limiters = SignalApiRateLimiters {
-                token:       actor::spawn(
-                    RateLimiter::new("token", LeakyBucketParameters {
-                        size:      self.ratelimiter_size,
-                        leak_rate: self.ratelimiter_size as f64,
-                    }),
+                token: actor::spawn(
+                    RateLimiter::new(
+                        "token",
+                        LeakyBucketParameters {
+                            size: self.ratelimiter_size,
+                            leak_rate: self.ratelimiter_size as f64,
+                        },
+                    ),
                     &runtime_handle,
                 )
                 .unwrap(),
                 attestation: actor::spawn(
-                    RateLimiter::new("attestation", LeakyBucketParameters {
-                        size:      self.ratelimiter_size,
-                        leak_rate: self.ratelimiter_size as f64,
-                    }),
+                    RateLimiter::new(
+                        "attestation",
+                        LeakyBucketParameters {
+                            size: self.ratelimiter_size,
+                            leak_rate: self.ratelimiter_size as f64,
+                        },
+                    ),
                     &runtime_handle,
                 )
                 .unwrap(),
-                backup:      actor::spawn(
-                    RateLimiter::new("backup", LeakyBucketParameters {
-                        size:      self.ratelimiter_size,
-                        leak_rate: self.ratelimiter_size as f64,
-                    }),
+                backup: actor::spawn(
+                    RateLimiter::new(
+                        "backup",
+                        LeakyBucketParameters {
+                            size: self.ratelimiter_size,
+                            leak_rate: self.ratelimiter_size as f64,
+                        },
+                    ),
                     &runtime_handle,
                 )
                 .unwrap(),
@@ -694,7 +705,7 @@ mod test {
         pub fn builder() -> SignalApiServiceTestBuilder {
             SignalApiServiceTestBuilder {
                 ratelimiter_size: 10000,
-                deny_backup:      false,
+                deny_backup: false,
             }
         }
 
@@ -728,10 +739,10 @@ mod test {
     fn valid_key_backup_request(request_type: KeyBackupRequestType) -> KeyBackupRequest {
         KeyBackupRequest {
             requestId: mocks::rand_bytes(vec![0; 50]),
-            iv:        mocks::rand_array(),
-            data:      mocks::rand_bytes(vec![0; 50]),
-            mac:       mocks::rand_array(),
-            r#type:    request_type,
+            iv: mocks::rand_array(),
+            data: mocks::rand_bytes(vec![0; 50]),
+            mac: mocks::rand_array(),
+            r#type: request_type,
         }
     }
 
@@ -819,8 +830,8 @@ mod test {
 
         let mock_response = GetTokenResponse {
             backupId: mocks::rand_array::<[u8; 32]>().into(),
-            token:    mocks::rand_array(),
-            tries:    mocks::rand(),
+            token: mocks::rand_array(),
+            tries: mocks::rand(),
         };
         test.scenario.expect(
             test.backup_manager
@@ -976,14 +987,14 @@ mod test {
 
         let mock_response = RemoteAttestationResponse {
             serverEphemeralPublic: mocks::rand_array(),
-            serverStaticPublic:    mocks::rand_array(),
-            quote:                 mocks::rand_bytes(vec![0; 100]),
-            iv:                    mocks::rand_array(),
-            ciphertext:            mocks::rand_bytes(vec![0; 50]),
-            tag:                   mocks::rand_array(),
-            signature:             mocks::rand_bytes(vec![0; 64]),
-            certificates:          "test_certificates".to_string(),
-            signatureBody:         "test_signature_body".to_string(),
+            serverStaticPublic: mocks::rand_array(),
+            quote: mocks::rand_bytes(vec![0; 100]),
+            iv: mocks::rand_array(),
+            ciphertext: mocks::rand_bytes(vec![0; 50]),
+            tag: mocks::rand_array(),
+            signature: mocks::rand_bytes(vec![0; 64]),
+            certificates: "test_certificates".to_string(),
+            signatureBody: "test_signature_body".to_string(),
         };
         test.scenario.expect(
             test.backup_manager
@@ -1200,9 +1211,9 @@ mod test {
         let mut test = SignalApiServiceTest::builder().build();
 
         let mock_response = KeyBackupResponse {
-            iv:   mocks::rand_array(),
+            iv: mocks::rand_array(),
             data: mocks::rand_bytes(vec![0; 50]),
-            mac:  mocks::rand_array(),
+            mac: mocks::rand_array(),
         };
         test.scenario.expect(
             test.backup_manager
@@ -1238,13 +1249,13 @@ mod test {
 
         let mock_token_response = GetTokenResponse {
             backupId: mocks::rand_array::<[u8; 32]>().into(),
-            token:    mocks::rand_array(),
-            tries:    mocks::rand(),
+            token: mocks::rand_array(),
+            tries: mocks::rand(),
         };
         let mock_backup_response = KeyBackupResponse {
-            iv:   mocks::rand_array(),
+            iv: mocks::rand_array(),
             data: mocks::rand_bytes(vec![0; 50]),
-            mac:  mocks::rand_array(),
+            mac: mocks::rand_array(),
         };
 
         let mock_backup_response_2 = mock_backup_response.clone();
