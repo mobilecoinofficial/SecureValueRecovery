@@ -60,7 +60,7 @@ fn main() -> Result<(), failure::Error> {
                 _ => unreachable!(),
             };
             let control_request = ControlRequest {
-                id:   Default::default(),
+                id: Default::default(),
                 data: Some(control_request::Data::GetStatusControlRequest(GetStatusControlRequest {
                     memory_status: subcommand_arguments.is_present("detailed_memory_status"),
                 })),
@@ -82,7 +82,7 @@ fn main() -> Result<(), failure::Error> {
         }
         "metrics" => {
             let control_request = ControlRequest {
-                id:   Default::default(),
+                id: Default::default(),
                 data: Some(control_request::Data::GetMetricsControlRequest(GetMetricsControlRequest {})),
             };
             let connection = connect_future
@@ -112,7 +112,7 @@ fn main() -> Result<(), failure::Error> {
             };
 
             let control_request = ControlRequest {
-                id:   Default::default(),
+                id: Default::default(),
                 data: Some(control_request::Data::XferControlRequest(XferControlRequest {
                     enclave_name,
                     xfer_control_command: xfer_control_command as i32,
@@ -149,7 +149,7 @@ fn main() -> Result<(), failure::Error> {
             let peer_node_id = hex::parse(subcommand_arguments.value_of("peer_node_id").unwrap())?;
             let peer_address = subcommand_arguments.value_of("peer_address");
             let control_request = ControlRequest {
-                id:   Default::default(),
+                id: Default::default(),
                 data: Some(control_request::Data::ForcePeerReconnectRequest(ForcePeerReconnectRequest {
                     enclave_name,
                     node_id: peer_node_id,
@@ -172,8 +172,30 @@ fn main() -> Result<(), failure::Error> {
         "disconnect-peer" => {
             let peer_node_id = hex::parse(subcommand_arguments.value_of("peer_node_id").unwrap())?;
             let control_request = ControlRequest {
-                id:   Default::default(),
+                id: Default::default(),
                 data: Some(control_request::Data::PeerDisconnectRequest(PeerDisconnectRequest {
+                    enclave_name,
+                    node_id: peer_node_id,
+                })),
+            };
+            let connection = connect_future
+                .and_then(move |framed: ControlFramed| {
+                    daemon_call(framed, control_request).map_err(|error: io::Error| {
+                        error!("error sending command: {}", error);
+                    })
+                })
+                .map(|(reply, _framed): (ControlReply, ControlFramed)| {
+                    if reply.data.is_some() {
+                        error!("error forcing disconnect: {:?}", reply.data);
+                    }
+                });
+            tokio::run(connection);
+        }
+        "disconnect-peer-perm" => {
+            let peer_node_id = hex::parse(subcommand_arguments.value_of("peer_node_id").unwrap())?;
+            let control_request = ControlRequest {
+                id: Default::default(),
+                data: Some(control_request::Data::PeerPermanentDeleteRequest(PeerPermanentDeleteRequest {
                     enclave_name,
                     node_id: peer_node_id,
                 })),
@@ -197,14 +219,14 @@ fn main() -> Result<(), failure::Error> {
 
             let request = ClientRequestParameters {
                 enclave_name: enclave_name.unwrap_or_default(),
-                subcommand:   client_subcommand_name.to_string(),
-                service_id:   parse_argument(client_subcommand_arguments.value_of("service_id"), hex::parse)?,
-                maybe_token:  parse_argument(client_subcommand_arguments.value_of("request_token"), hex::parse)?,
-                backup_id:    parse_argument(client_subcommand_arguments.value_of("backup_id"), hex::parse)?,
-                backup_data:  parse_argument(client_subcommand_arguments.value_of("backup_data"), hex::parse)?,
-                backup_pin:   parse_argument(client_subcommand_arguments.value_of("backup_pin"), hex::parse)?,
+                subcommand: client_subcommand_name.to_string(),
+                service_id: parse_argument(client_subcommand_arguments.value_of("service_id"), hex::parse)?,
+                maybe_token: parse_argument(client_subcommand_arguments.value_of("request_token"), hex::parse)?,
+                backup_id: parse_argument(client_subcommand_arguments.value_of("backup_id"), hex::parse)?,
+                backup_data: parse_argument(client_subcommand_arguments.value_of("backup_data"), hex::parse)?,
+                backup_pin: parse_argument(client_subcommand_arguments.value_of("backup_pin"), hex::parse)?,
                 backup_tries: parse_argument(client_subcommand_arguments.value_of("backup_tries"), u32::from_str)?,
-                valid_from:   parse_argument(client_subcommand_arguments.value_of("request_valid_from"), u64::from_str)?.unwrap_or(0),
+                valid_from: parse_argument(client_subcommand_arguments.value_of("request_valid_from"), u64::from_str)?.unwrap_or(0),
             };
 
             let count = u64::from_str(client_subcommand_arguments.value_of("request_count").unwrap_or_default())?;
@@ -278,7 +300,9 @@ fn main() -> Result<(), failure::Error> {
 }
 
 fn parse_argument<T, U, E, F>(maybe_argument: Option<T>, parse_fun: F) -> Result<Option<U>, E>
-where F: Fn(T) -> Result<U, E> {
+where
+    F: Fn(T) -> Result<U, E>,
+{
     if let Some(argument) = maybe_argument {
         Ok(Some(parse_fun(argument)?))
     } else {
@@ -348,22 +372,21 @@ fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlRepl
 #[derive(Clone)]
 struct ClientRequestParameters {
     enclave_name: String,
-    subcommand:   String,
-    service_id:   Option<Vec<u8>>,
-    maybe_token:  Option<Vec<u8>>,
-    backup_id:    Option<Vec<u8>>,
-    backup_data:  Option<Vec<u8>>,
-    backup_pin:   Option<Vec<u8>>,
+    subcommand: String,
+    service_id: Option<Vec<u8>>,
+    maybe_token: Option<Vec<u8>>,
+    backup_id: Option<Vec<u8>>,
+    backup_data: Option<Vec<u8>>,
+    backup_pin: Option<Vec<u8>>,
     backup_tries: Option<u32>,
-    valid_from:   u64,
+    valid_from: u64,
 }
 
 fn client_request(
     request_tx: ControlClientSender,
     request: ClientRequestParameters,
     request_id: u64,
-) -> impl Future<Item = (), Error = ()>
-{
+) -> impl Future<Item = (), Error = ()> {
     let ClientRequestParameters {
         enclave_name,
         subcommand,
@@ -406,7 +429,7 @@ fn client_request(
         .map(move |token: Vec<u8>| {
             let request = match subcommand.as_str() {
                 "backup" => kbupd_client::Request {
-                    backup:  Some(kbupd_client::BackupRequest {
+                    backup: Some(kbupd_client::BackupRequest {
                         service_id,
                         backup_id: Some(backup_id_1),
                         valid_from: Some(valid_from),
@@ -416,10 +439,10 @@ fn client_request(
                         tries: backup_tries,
                     }),
                     restore: None,
-                    delete:  None,
+                    delete: None,
                 },
                 "restore" => kbupd_client::Request {
-                    backup:  None,
+                    backup: None,
                     restore: Some(kbupd_client::RestoreRequest {
                         service_id,
                         backup_id: Some(backup_id_1),
@@ -427,7 +450,7 @@ fn client_request(
                         valid_from: Some(valid_from),
                         pin: Some(unwrap_or_random_bytes(32, backup_pin)),
                     }),
-                    delete:  None,
+                    delete: None,
                 },
                 _ => Default::default(),
             };
@@ -476,10 +499,9 @@ fn send_transaction_request(
     enclave_name: String,
     request_id: u64,
     data: transaction_control_request::Data,
-) -> impl Future<Item = TransactionControlReply, Error = ()>
-{
+) -> impl Future<Item = TransactionControlReply, Error = ()> {
     let control_request = ControlRequest {
-        id:   request_id,
+        id: request_id,
         data: Some(control_request::Data::TransactionControlRequest(TransactionControlRequest {
             enclave_name,
             data: Some(data),
@@ -500,10 +522,9 @@ fn negotiate_client_request(
     enclave_name: String,
     request_id: u64,
     client_pubkey: Vec<u8>,
-) -> impl Future<Item = kbupd_client::RequestNegotiation, Error = ()>
-{
+) -> impl Future<Item = kbupd_client::RequestNegotiation, Error = ()> {
     let control_request = ControlRequest {
-        id:   request_id,
+        id: request_id,
         data: Some(control_request::Data::NegotiateClientRequest(NegotiateClientRequest {
             enclave_name,
             client_pubkey,
@@ -550,8 +571,7 @@ fn send_client_request(
     mut random: OsRng,
     negotiation: kbupd_client::RequestNegotiation,
     request: kbupd_client::Request,
-) -> impl Future<Item = kbupd_client::Response, Error = ()>
-{
+) -> impl Future<Item = kbupd_client::Response, Error = ()> {
     let request_type = match &request {
         kbupd_client::Request { backup: Some(_), .. } => ClientRequestType::Backup,
         kbupd_client::Request { restore: Some(_), .. } => ClientRequestType::Restore,
@@ -567,15 +587,15 @@ fn send_client_request(
         .and_then(
             move |(encrypted_request, pending_request): (kbupd_client::EncryptedRequest, kbupd_client::PendingRequest)| {
                 let control_request = ControlRequest {
-                    id:   request_id,
+                    id: request_id,
                     data: Some(control_request::Data::ClientEncryptedRequest(ClientEncryptedRequest {
                         enclave_name,
                         request_type: request_type.into(),
                         backup_id,
                         pending_request_id: encrypted_request.pending_request_id,
                         encrypted_message: ClientEncryptedMessage {
-                            iv:   encrypted_request.encrypted_message.iv.to_vec(),
-                            mac:  encrypted_request.encrypted_message.mac.to_vec(),
+                            iv: encrypted_request.encrypted_message.iv.to_vec(),
+                            mac: encrypted_request.encrypted_message.mac.to_vec(),
                             data: encrypted_request.encrypted_message.data,
                         },
                     })),
@@ -617,7 +637,7 @@ fn parse_client_reply(reply: ControlReply) -> Result<kbupd_client::EncryptedMess
 
 struct ControlClientState {
     framed_tx: SplitSink<ControlFramed>,
-    requests:  BTreeMap<u64, oneshot::Sender<ControlReply>>,
+    requests: BTreeMap<u64, oneshot::Sender<ControlReply>>,
 }
 
 #[derive(Clone)]
@@ -640,8 +660,7 @@ enum ControlMessage {
 fn control_client(
     framed: ControlFramed,
     request_rx: mpsc::UnboundedReceiver<(ControlRequest, oneshot::Sender<ControlReply>)>,
-) -> impl Future<Item = (), Error = ()>
-{
+) -> impl Future<Item = (), Error = ()> {
     let (framed_tx, framed_rx) = framed.split();
     let state = ControlClientState {
         framed_tx,
