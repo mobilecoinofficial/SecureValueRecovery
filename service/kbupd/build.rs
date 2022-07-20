@@ -19,8 +19,24 @@ fn main() {
     protoc
         .type_attribute(".", "#[derive(serde::Serialize)]")
         .field_attribute("node_id", "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]")
-        .field_attribute("group_id", "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]")
-        .field_attribute("id", "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]")
+        .field_attribute(
+            "EnclaveFrontendPartitionStatus.group_id",
+            "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]",
+        )
+        .field_attribute(
+            "EnclaveFrontendRangeStatus.group_id",
+            "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]",
+        )
+        .field_attribute(
+            "EnclaveReplicaPartitionStatus.group_id",
+            "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]",
+        )
+        .field_attribute(
+            "EnclaveReplicaPartitionStatus.service_id",
+            "#[serde(with = \"serde_with::As::<Option<serde_with::hex::Hex>>\")]",
+        )
+        .field_attribute("BackupId.id", "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]")
+        .field_attribute("ServiceId.id", "#[serde(with = \"serde_with::As::<serde_with::hex::Hex>\")]")
         .extern_path(".protobufs.kbupd_client", "kbupd_client")
         .compile_protos(&["src/kbupd.proto"], &["src/", "../kbupd_client/src/"])
         .expect("error compiling protobufs");
