@@ -22,6 +22,7 @@ use kbupd_util::{hex, ToHex};
 use log::*;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use serde_json::to_string_pretty as to_json;
 use tokio::net::TcpStream;
 use tokio_codec::Decoder;
 
@@ -332,17 +333,22 @@ fn print_info(maybe_enclave_name: Option<String>, status: GetStatusControlReply)
 }
 
 fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlReply) {
-    let enclave_statuses = status.enclaves.into_iter().filter(|enclave_status: &EnclaveStatus| {
-        if let Some(enclave_name) = &maybe_enclave_name {
-            &enclave_status.name == enclave_name
-        } else {
-            true
-        }
-    });
+    let enclave_statuses = status
+        .enclaves
+        .into_iter()
+        .filter(|enclave_status: &EnclaveStatus| {
+            if let Some(enclave_name) = &maybe_enclave_name {
+                &enclave_status.name == enclave_name
+            } else {
+                true
+            }
+        })
+        .collect::<Vec<_>>();
 
-    for enclave_status in enclave_statuses {
-        println!("{:#}", enclave_status);
-    }
+    // for enclave_status in enclave_statuses {
+    //     println!("{:#}", enclave_status);
+    // }
+    println!(to_json(enclave_statuses));
 }
 
 #[derive(Clone)]
