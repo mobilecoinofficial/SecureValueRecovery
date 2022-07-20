@@ -22,6 +22,7 @@ use kbupd_util::{hex, ToHex};
 use log::*;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use serde_json::to_string as to_json;
 use tokio::net::TcpStream;
 use tokio_codec::Decoder;
 
@@ -37,6 +38,7 @@ fn main() -> Result<(), failure::Error> {
     let connect_address = arguments.value_of("connect_address").unwrap_or_default();
     let debug = arguments.is_present("debug");
     let enclave_name = subcommand_arguments.value_of("enclave_name").map(str::to_string);
+    let json_output = subcommand_arguments.is_present("json");
 
     let log_level = if debug { log::Level::Debug } else { log::Level::Info };
     let (logger, logger_guard) = logger::Logger::new_with_guard(log_level);
@@ -54,11 +56,7 @@ fn main() -> Result<(), failure::Error> {
 
     match subcommand_name {
         "info" | "status" => {
-            let print_fun = match subcommand_name {
-                "info" => print_info,
-                "status" => print_status,
-                _ => unreachable!(),
-            };
+            let subcommand_name = subcommand_name.to_string();
             let control_request = ControlRequest {
                 id:   Default::default(),
                 data: Some(control_request::Data::GetStatusControlRequest(GetStatusControlRequest {
@@ -73,7 +71,11 @@ fn main() -> Result<(), failure::Error> {
                 })
                 .map(move |(reply, _framed): (ControlReply, ControlFramed)| {
                     if let Some(control_reply::Data::GetStatusControlReply(reply)) = reply.data {
-                        print_fun(enclave_name, reply);
+                        match subcommand_name.as_str() {
+                            "info" => print_info(enclave_name, reply),
+                            "status" => print_status(enclave_name, reply, json_output),
+                            _ => unreachable!(),
+                        };
                     } else {
                         error!("error fetching status: {:?}", reply.data);
                     }
@@ -331,14 +333,24 @@ fn print_info(maybe_enclave_name: Option<String>, status: GetStatusControlReply)
     }
 }
 
-fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlReply) {
-    let enclave_statuses = status.enclaves.into_iter().filter(|enclave_status: &EnclaveStatus| {
-        if let Some(enclave_name) = &maybe_enclave_name {
-            &enclave_status.name == enclave_name
-        } else {
-            true
-        }
-    });
+fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlReply, json: bool) {
+    let enclave_statuses: Vec<_> = status
+        .enclaves
+        .into_iter()
+        .filter(|enclave_status: &EnclaveStatus| {
+            if let Some(enclave_name) = &maybe_enclave_name {
+                &enclave_status.name == enclave_name
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    if json {
+        let json = to_json(&enclave_statuses).expect("unable to json encode status");
+        println!("{}", json);
+        return;
+    }
 
     for enclave_status in enclave_statuses {
         println!("{:#}", enclave_status);
@@ -709,9 +721,14 @@ fn parse_arguments() -> clap::ArgMatches<'static> {
         .long("detailed-memory-status")
         .help("run mallinfo in enclave to traverse all free memory blocks to calculate used memory");
 
+    let json_output_argument = clap::Arg::with_name("json")
+        .long("json")
+        .help("format output in JSON");
+
     let status_subcommand = clap::SubCommand::with_name("status")
         .arg(enclave_name_argument.clone())
         .arg(detailed_memory_status_argument)
+        .arg(json_output_argument)
         .about("dump complete status information in a human-readable format");
 
     let metrics_subcommand = clap::SubCommand::with_name("metrics").about("dump a metrics snapshot in JSON");
