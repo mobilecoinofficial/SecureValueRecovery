@@ -721,9 +721,14 @@ fn parse_arguments() -> clap::ArgMatches<'static> {
         .long("detailed-memory-status")
         .help("run mallinfo in enclave to traverse all free memory blocks to calculate used memory");
 
+    let json_output_argument = clap::Arg::with_name("json")
+        .long("json")
+        .help("format output in JSON");
+
     let status_subcommand = clap::SubCommand::with_name("status")
         .arg(enclave_name_argument.clone())
         .arg(detailed_memory_status_argument)
+        .arg(json_output_argument)
         .about("dump complete status information in a human-readable format");
 
     let metrics_subcommand = clap::SubCommand::with_name("metrics").about("dump a metrics snapshot in JSON");
