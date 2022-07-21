@@ -69,9 +69,10 @@ fn main() -> Result<(), failure::Error> {
                 })
                 .map(move |(reply, _framed): (ControlReply, ControlFramed)| {
                     if let Some(control_reply::Data::GetStatusControlReply(reply)) = reply.data {
+                        let json_output = subcommand_arguments.is_present("json");
                         match subcommand_name {
                             "info" => print_info(enclave_name, reply),
-                            "status" => print_status(enclave_name, reply, subcommand_arguments.is_present("json")),
+                            "status" => print_status(enclave_name, reply, json_output),
                             _ => unreachable!(),
                         };
                     } else {
