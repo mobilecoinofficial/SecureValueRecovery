@@ -333,29 +333,27 @@ fn print_info(maybe_enclave_name: Option<String>, status: GetStatusControlReply)
     }
 }
 
-fn print_status(json: bool)-> Fn<(Option<String>, GetStatusControlReply)> {
-    return |maybe_enclave_name: Option<String>, status: GetStatusControlReply| {
-        let enclave_statuses: Vec<_> = status
-            .enclaves
-            .into_iter()
-            .filter(|enclave_status: &EnclaveStatus| {
-                if let Some(enclave_name) = &maybe_enclave_name {
-                    &enclave_status.name == enclave_name
-                } else {
-                    true
-                }
-            })
+fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlReply, json: bool) {
+    let enclave_statuses: Vec<_> = status
+        .enclaves
+        .into_iter()
+        .filter(|enclave_status: &EnclaveStatus| {
+            if let Some(enclave_name) = &maybe_enclave_name {
+                &enclave_status.name == enclave_name
+            } else {
+                true
+            }
+        })
         .collect();
 
-        if json {
-            let json = to_json(&enclave_statuses).expect("unable to json encode status");
-            println!("{}", json);
-            return;
-        }
+    if json {
+        let json = to_json(&enclave_statuses).expect("unable to json encode status");
+        println!("{}", json);
+        return;
+    }
 
-        for enclave_status in enclave_statuses {
-            println!("{:#}", enclave_status);
-        }
+    for enclave_status in enclave_statuses {
+        println!("{:#}", enclave_status);
     }
 }
 
