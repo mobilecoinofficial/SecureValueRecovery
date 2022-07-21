@@ -38,6 +38,7 @@ fn main() -> Result<(), failure::Error> {
     let connect_address = arguments.value_of("connect_address").unwrap_or_default();
     let debug = arguments.is_present("debug");
     let enclave_name = subcommand_arguments.value_of("enclave_name").map(str::to_string);
+    let json_output = subcommand_arguments.is_present("json");
 
     let log_level = if debug { log::Level::Debug } else { log::Level::Info };
     let (logger, logger_guard) = logger::Logger::new_with_guard(log_level);
@@ -69,7 +70,6 @@ fn main() -> Result<(), failure::Error> {
                 })
                 .map(move |(reply, _framed): (ControlReply, ControlFramed)| {
                     if let Some(control_reply::Data::GetStatusControlReply(reply)) = reply.data {
-                        let json_output = subcommand_arguments.is_present("json");
                         match subcommand_name {
                             "info" => print_info(enclave_name, reply),
                             "status" => print_status(enclave_name, reply, json_output),
