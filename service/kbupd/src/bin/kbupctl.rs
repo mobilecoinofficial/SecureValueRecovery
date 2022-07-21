@@ -57,7 +57,7 @@ fn main() -> Result<(), failure::Error> {
         "info" | "status" => {
             let print_fun = match subcommand_name {
                 "info" => print_info,
-                "status" => print_status,
+                "status" => print_status(subcommand_arguments.is_present("json")),
                 _ => unreachable!(),
             };
             let control_request = ControlRequest {
@@ -332,23 +332,30 @@ fn print_info(maybe_enclave_name: Option<String>, status: GetStatusControlReply)
     }
 }
 
-fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlReply) {
-    let enclave_statuses = status
-        .enclaves
-        .into_iter()
-        .filter(|enclave_status: &EnclaveStatus| {
-            if let Some(enclave_name) = &maybe_enclave_name {
-                &enclave_status.name == enclave_name
-            } else {
-                true
-            }
-        })
-        .collect::<Vec<_>>();
+fn print_status(json: bool) -> fn (maybe_enclave_name: Option<String>, status: GetStatusControlReply) {
+    return |maybe_enclave_name: Option<String>, status: GetStatusControlReply| {
+        let enclave_statuses: Vec<_> = status
+            .enclaves
+            .into_iter()
+            .filter(|enclave_status: &EnclaveStatus| {
+                if let Some(enclave_name) = &maybe_enclave_name {
+                    &enclave_status.name == enclave_name
+                } else {
+                    true
+                }
+            })
+        .collect();
 
-    // for enclave_status in enclave_statuses {
-    //     println!("{:#}", enclave_status);
-    // }
-    println!("{}", to_json(&enclave_statuses).expect("should format to json"));
+        if json {
+            let json = to_json(&enclave_statuses).expect("unable to json encode status");
+            println!("{}", json);
+            return
+        }
+
+        for enclave_status in enclave_statuses {
+            println!("{:#}", enclave_status);
+        }
+    };
 }
 
 #[derive(Clone)]
