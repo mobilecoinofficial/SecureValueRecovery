@@ -348,7 +348,7 @@ fn print_status(maybe_enclave_name: Option<String>, status: GetStatusControlRepl
     // for enclave_status in enclave_statuses {
     //     println!("{:#}", enclave_status);
     // }
-    println!("{}", to_json(enclave_statuses));
+    println!("{}", to_json(&enclave_statuses).expect("should format to json"));
 }
 
 #[derive(Clone)]
