@@ -22,6 +22,7 @@ use kbupd_util::{hex, ToHex};
 use log::*;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use serde_json::to_string as to_json;
 use tokio::net::TcpStream;
 use tokio_codec::Decoder;
 
@@ -55,11 +56,7 @@ fn main() -> Result<(), failure::Error> {
 
     match subcommand_name {
         "info" | "status" => {
-            let print_fun = match subcommand_name {
-                "info" => print_info,
-                "status" => print_status(json_output),
-                _ => unreachable!(),
-            };
+            let subcommand_name = subcommand_name.to_string();
             let control_request = ControlRequest {
                 id:   Default::default(),
                 data: Some(control_request::Data::GetStatusControlRequest(GetStatusControlRequest {
@@ -74,7 +71,11 @@ fn main() -> Result<(), failure::Error> {
                 })
                 .map(move |(reply, _framed): (ControlReply, ControlFramed)| {
                     if let Some(control_reply::Data::GetStatusControlReply(reply)) = reply.data {
-                        print_fun(enclave_name, reply);
+                        match subcommand_name.as_str() {
+                            "info" => print_info(enclave_name, reply),
+                            "status" => print_status(enclave_name, reply, json_output),
+                            _ => unreachable!(),
+                        };
                     } else {
                         error!("error fetching status: {:?}", reply.data);
                     }
